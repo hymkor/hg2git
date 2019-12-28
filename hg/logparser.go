@@ -19,6 +19,8 @@ type ChangeSet struct {
 	Tags        []string
 	Files       []string
 	Description string
+
+	Parents []*ChangeSet
 }
 
 type ErrColonNotFound string
