@@ -39,8 +39,12 @@ func author(org string) string {
 func trace1(cs *ChangeSet) error {
 	stack := []*ChangeSet{}
 	for cs.Parents != nil && len(cs.Parents) >= 1 {
-		stack = append(stack, cs)
-		cs = cs.Parents[0]
+		if len(cs.Parents) >= 2 {
+			return fmt.Errorf("%s: not support branch", cs)
+		} else {
+			stack = append(stack, cs)
+			cs = cs.Parents[0]
+		}
 	}
 	if err := run("git", "init"); err != nil {
 		return err
