@@ -37,27 +37,36 @@ func author(org string) string {
 }
 
 func trace1(cs *ChangeSet) error {
-	if cs.Parents != nil && len(cs.Parents) >= 1 {
-		trace1(cs.Parents[0])
-	} else {
-		if err := run("git", "init"); err != nil {
+	stack := []*ChangeSet{}
+	for cs.Parents != nil && len(cs.Parents) >= 1 {
+		stack = append(stack, cs)
+		cs = cs.Parents[0]
+	}
+	if err := run("git", "init"); err != nil {
+		return err
+	}
+	for {
+		if err := run("hg", "update", "-C", cs.ChangeSetId); err != nil {
 			return err
 		}
+		args := []string{"add"}
+		args = append(args, cs.Files...)
+		if err := run("git", args...); err != nil {
+			return err
+		}
+		err := run("git", "commit",
+			"-m", cs.Description,
+			"--date", cs.Date.Format("Mon Jan 02 15:04:05 2006 -0700"),
+			"--author="+author(cs.User))
+		if err != nil {
+			return err
+		}
+		if len(stack) <= 0 {
+			return nil
+		}
+		cs = stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
 	}
-	if err := run("hg", "update", "-C", cs.ChangeSetId); err != nil {
-		return err
-	}
-
-	args := []string{"add"}
-	args = append(args, cs.Files...)
-	if err := run("git", args...); err != nil {
-		return err
-	}
-
-	return run("git", "commit",
-		"-m", cs.Description,
-		"--date", cs.Date.Format("Mon Jan 02 15:04:05 2006 -0700"),
-		"--author="+author(cs.User))
 }
 
 func Trace(src, dst string) error {
