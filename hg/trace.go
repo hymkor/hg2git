@@ -1,0 +1,93 @@
+package hg
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+)
+
+func run(name string, args ...string) error {
+	cmd1 := exec.Command(name, args...)
+	cmd1.Stdout = os.Stdout
+	cmd1.Stderr = os.Stderr
+	cmd1.Stdin = os.Stdin
+
+	fmt.Println()
+	fmt.Print(name)
+	for _, s := range args {
+		fmt.Print(" \"", s, "\"")
+	}
+	fmt.Println()
+	return cmd1.Run()
+}
+
+var fullAuthor = regexp.MustCompile(`\<\w+\@[\w\.]+\>\s*$`)
+
+func author(org string) string {
+	if fullAuthor.MatchString(org) {
+		return org
+	}
+	atmarkPos := strings.IndexRune(org, '@')
+	if atmarkPos >= 0 {
+		return fmt.Sprintf("%s <%s>", org[:atmarkPos], org)
+	}
+	return fmt.Sprintf("%s <%s@localhost>", org)
+}
+
+func trace1(cs *ChangeSet) error {
+	if cs.Parents != nil && len(cs.Parents) >= 1 {
+		trace1(cs.Parents[0])
+	} else {
+		if err := run("git", "init"); err != nil {
+			return err
+		}
+	}
+	if err := run("hg", "update", "-C", cs.ChangeSetId); err != nil {
+		return err
+	}
+
+	args := []string{"add"}
+	args = append(args, cs.Files...)
+	if err := run("git", args...); err != nil {
+		return err
+	}
+
+	return run("git", "commit",
+		"-m", cs.Description,
+		"--date", cs.Date.Format("Mon Jan 02 15:04:05 2006 -0700"),
+		"--author="+author(cs.User))
+}
+
+func Trace(src, dst string) error {
+	var rep Repository
+
+	err := rep.Load(src, func(err error) error {
+		println(err.Error())
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(dst); err == nil {
+		return fmt.Errorf("%s: %w", dst, os.ErrExist)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("%s: %w", dst, err)
+	}
+	if err := run("hg", "clone", src, dst); err != nil {
+		return err
+	}
+
+	saveDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	defer os.Chdir(saveDir)
+	if err := os.Chdir(dst); err != nil {
+		return err
+	}
+
+	return trace1(rep.Head)
+}

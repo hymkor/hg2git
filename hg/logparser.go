@@ -136,7 +136,9 @@ func LoadChangeSets(dir string, warn func(error) error) ([]*ChangeSet, error) {
 		return nil, err
 	}
 	defer os.Chdir(saveDir)
-	os.Chdir(dir)
+	if err := os.Chdir(dir); err != nil {
+		return nil, err
+	}
 
 	cmd1 := exec.Command("hg", "log", "-v")
 	cmd1.Stderr = os.Stderr
