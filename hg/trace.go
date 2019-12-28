@@ -49,6 +49,9 @@ func trace1(cs *ChangeSet) error {
 	if err := run("git", "init"); err != nil {
 		return err
 	}
+	if err := run("git", "config", "--local", "core.autocrlf", "false"); err != nil {
+		return err
+	}
 	for {
 		if err := run("hg", "update", "-C", cs.ChangeSetId); err != nil {
 			return err
