@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func run(name string, args ...string) error {
@@ -52,6 +53,48 @@ func author(org string) string {
 	return fmt.Sprintf("%s <%s@localhost>", org)
 }
 
+func hgClone(src, dst string) error {
+	return run("hg", "clone", src, dst)
+}
+
+func gitInit() error {
+	if err := run("git", "init"); err != nil {
+		return err
+	}
+	return run("git", "config", "--local", "core.autocrlf", "false")
+}
+
+func hgUpdateC(id string) error {
+	return run("hg", "update", "-C", id)
+}
+
+func hgAdd(files ...string) error {
+	args := []string{"add"}
+	args = append(args, files...)
+	return run("git", args...)
+}
+
+func gitCommit(desc string, date time.Time, user string) (string, error) {
+	err := run("git", "commit",
+		"-m", desc,
+		"--date", date.Format("Mon Jan 02 15:04:05 2006 -0700"),
+		"--author", author(user))
+	if err != nil {
+		return "", err
+	}
+	return quote("git", "log", "-n", "1", "--format=%H")
+}
+
+func hgOneCommitToGit(cs *ChangeSet) (string, error) {
+	if err := hgUpdateC(cs.ChangeSetId); err != nil {
+		return "", err
+	}
+	if err := hgAdd(cs.Files...); err != nil {
+		return "", err
+	}
+	return gitCommit(cs.Description, cs.Date, cs.User)
+}
+
 func trace1(cs *ChangeSet) error {
 	stack := []*ChangeSet{}
 	for cs.Parents != nil && len(cs.Parents) >= 1 {
@@ -62,31 +105,13 @@ func trace1(cs *ChangeSet) error {
 			cs = cs.Parents[0]
 		}
 	}
-	if err := run("git", "init"); err != nil {
-		return err
-	}
-	if err := run("git", "config", "--local", "core.autocrlf", "false"); err != nil {
+	if err := gitInit(); err != nil {
 		return err
 	}
 	for {
-		if err := run("hg", "update", "-C", cs.ChangeSetId); err != nil {
-			return err
-		}
-		args := []string{"add"}
-		args = append(args, cs.Files...)
-		if err := run("git", args...); err != nil {
-			return err
-		}
-		err := run("git", "commit",
-			"-m", cs.Description,
-			"--date", cs.Date.Format("Mon Jan 02 15:04:05 2006 -0700"),
-			"--author", author(cs.User))
+		commitid, err := hgOneCommitToGit(cs)
 		if err != nil {
 			return err
-		}
-		commitid, err := quote("git", "log", "-n", "1", "--format=%H")
-		if err == nil {
-			fmt.Printf("git commit-id=[%s]\n", commitid)
 		}
 		if len(stack) <= 0 {
 			return nil
@@ -112,7 +137,7 @@ func Trace(src, dst string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("%s: %w", dst, err)
 	}
-	if err := run("hg", "clone", src, dst); err != nil {
+	if err := hgClone(src, dst); err != nil {
 		return err
 	}
 
