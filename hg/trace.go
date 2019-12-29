@@ -17,7 +17,12 @@ func run(name string, args ...string) error {
 	fmt.Println()
 	fmt.Print(name)
 	for _, s := range args {
-		fmt.Print(" \"", s, "\"")
+		fmt.Print(" ")
+		if strings.IndexByte(s, ' ') >= 0 {
+			fmt.Print("\"", s, "\"")
+		} else {
+			fmt.Print(s)
+		}
 	}
 	fmt.Println()
 	return cmd1.Run()
@@ -75,7 +80,7 @@ func trace1(cs *ChangeSet) error {
 		err := run("git", "commit",
 			"-m", cs.Description,
 			"--date", cs.Date.Format("Mon Jan 02 15:04:05 2006 -0700"),
-			"--author="+author(cs.User))
+			"--author", author(cs.User))
 		if err != nil {
 			return err
 		}
