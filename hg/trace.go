@@ -23,6 +23,17 @@ func run(name string, args ...string) error {
 	return cmd1.Run()
 }
 
+func quote(name string, args ...string) (string, error) {
+	cmd1 := exec.Command(name, args...)
+	cmd1.Stderr = os.Stderr
+	cmd1.Stdin = os.Stdin
+	output, err := cmd1.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 var fullAuthor = regexp.MustCompile(`\<\w+\@[\w\.]+\>\s*$`)
 
 func author(org string) string {
@@ -67,6 +78,10 @@ func trace1(cs *ChangeSet) error {
 			"--author="+author(cs.User))
 		if err != nil {
 			return err
+		}
+		commitid, err := quote("git", "log", "-n", "1", "--format=%H")
+		if err == nil {
+			fmt.Printf("git commit-id=[%s]\n", commitid)
 		}
 		if len(stack) <= 0 {
 			return nil
