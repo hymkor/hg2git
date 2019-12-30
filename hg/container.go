@@ -1,5 +1,10 @@
 package hg
 
+import (
+	"fmt"
+	"strconv"
+)
+
 type Repository struct {
 	BySerial map[int]*ChangeSet
 	ByHash   map[string]*ChangeSet
@@ -20,6 +25,7 @@ func (rep *Repository) Load(dir string, warn func(error) error) error {
 	for _, set := range sets {
 		rep.BySerial[set.Serial] = set
 		rep.ByHash[set.ChangeSetId] = set
+
 		for _, tag1 := range set.Tags {
 			rep.ByTag[tag1] = set
 		}
@@ -27,17 +33,23 @@ func (rep *Repository) Load(dir string, warn func(error) error) error {
 			max = set.Serial
 		}
 	}
-	for _, set := range sets {
-		if set.Parents == nil {
-			if p, ok := rep.BySerial[set.Serial-1]; ok {
-				set.Parents = []*ChangeSet{p}
-			}
-		}
-	}
 	if max >= 0 {
 		rep.Head = rep.BySerial[max]
 	} else {
 		rep.Head = nil
+	}
+	for _, set := range sets {
+		for _, idStr := range set.parentIDs {
+			idNum, err := strconv.Atoi(idStr)
+			if err != nil {
+				return err
+			}
+			if p, ok := rep.BySerial[idNum]; ok {
+				set.Parents = append(set.Parents, p)
+			} else {
+				return fmt.Errorf("mercurial serial number %d not found.", idNum)
+			}
+		}
 	}
 	return nil
 }

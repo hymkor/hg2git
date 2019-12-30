@@ -19,8 +19,9 @@ type ChangeSet struct {
 	Tags        []string
 	Files       []string
 	Description string
+	Parents     []*ChangeSet
 
-	Parents []*ChangeSet
+	parentIDs []string
 }
 
 type ErrColonNotFound string
@@ -54,6 +55,8 @@ func ReadChangeSets(r io.Reader, warn func(error) error) ([]*ChangeSet, error) {
 			continue
 		}
 		switch field[0] {
+		case "parent":
+			draft.parentIDs = append(draft.parentIDs, field[1])
 		case "changeset":
 			var err error
 			draft.Serial, draft.ChangeSetId, err = parseChangeSetId(field[1])
