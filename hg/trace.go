@@ -70,7 +70,16 @@ func hgUpdateC(id string) error {
 
 func hgAdd(files ...string) error {
 	args := []string{"add"}
-	args = append(args, files...)
+	cont := ""
+	for _, s := range files {
+		fname := cont + s
+		if _, err := os.Stat(fname); err != nil {
+			cont = fname + " "
+		} else {
+			args = append(args, fname)
+			cont = ""
+		}
+	}
 	return run("git", args...)
 }
 
@@ -95,30 +104,13 @@ func hgOneCommitToGit(cs *ChangeSet) (string, error) {
 	return gitCommit(cs.Description, cs.Date, cs.User)
 }
 
-func trace1(cs *ChangeSet) error {
-	stack := []*ChangeSet{}
-	for cs.Parents != nil && len(cs.Parents) >= 1 {
-		if len(cs.Parents) >= 2 {
-			return fmt.Errorf("%s: not support branch", cs)
-		} else {
-			stack = append(stack, cs)
-			cs = cs.Parents[0]
-		}
-	}
-	if err := gitInit(); err != nil {
-		return err
-	}
-	for {
-		commitid, err := hgOneCommitToGit(cs)
-		if err != nil {
-			return err
-		}
-		if len(stack) <= 0 {
-			return nil
-		}
-		cs = stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-	}
+func gitMerge(id string) {
+	run("git", "merge", "--no-commit", "--no-edit", id)
+}
+
+func gitCheckout(id, newbranch string) {
+	run("git", "checkout", "-f", id)
+	run("git", "checkout", "-b", newbranch)
 }
 
 func Trace(src, dst string) error {
@@ -150,5 +142,50 @@ func Trace(src, dst string) error {
 		return err
 	}
 
-	return trace1(rep.Head)
+	if err := gitInit(); err != nil {
+		return err
+	}
+
+	lastHgId := rep.BySerial[0].ChangeSetId
+	lastGitId, err := hgOneCommitToGit(rep.BySerial[0])
+	if err != nil {
+		return err
+	}
+	branchSerial := 0
+	branchName := "master"
+
+	HgIdToGit := map[string][2]string{
+		lastHgId: [2]string{lastGitId, branchName}}
+
+	for serial := 1; ; serial++ {
+		cs, ok := rep.BySerial[serial]
+		if !ok {
+			break
+		}
+		if len(cs.Parents) >= 1 {
+			if cs.Parents[0].ChangeSetId == lastHgId {
+				if len(cs.Parents) >= 2 {
+					gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
+				}
+			} else if len(cs.Parents) >= 2 && cs.Parents[1].ChangeSetId == lastHgId {
+				gitMerge(HgIdToGit[cs.Parents[0].ChangeSetId][1])
+			} else {
+				// new branch
+				branchSerial++
+				branchName = fmt.Sprintf("fork%d", branchSerial)
+				gitCheckout(HgIdToGit[cs.Parents[0].ChangeSetId][0], branchName)
+				if len(cs.Parents) >= 2 {
+					gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
+				}
+			}
+		}
+		lastGitId, err = hgOneCommitToGit(cs)
+		if err != nil {
+			return err
+		}
+		lastHgId = cs.ChangeSetId
+		HgIdToGit[lastHgId] = [2]string{lastGitId, branchName}
+	}
+
+	return nil
 }

@@ -19,8 +19,9 @@ type ChangeSet struct {
 	Tags        []string
 	Files       []string
 	Description string
+	Parents     []*ChangeSet
 
-	Parents []*ChangeSet
+	parentIDs []string
 }
 
 type ErrColonNotFound string
@@ -33,19 +34,21 @@ func parseChangeSetId(text string) (int, string, error) {
 	if len(ids) < 2 {
 		return -1, text, ErrColonNotFound(text)
 	}
-	serial, err := strconv.Atoi(ids[0])
+	serial, err := strconv.Atoi(strings.TrimSpace(ids[0]))
 	if err != nil {
 		return -1, text, fmt.Errorf("%s: %w", text, err)
 	}
 	return serial, ids[1], nil
 }
 
-func ReadChangeSets(r io.Reader, warn func(error) error) ([]*ChangeSet, error) {
+func ReadChangeSets(r io.Reader, warn func(error) error, tee io.Writer) ([]*ChangeSet, error) {
 	sc := bufio.NewScanner(r)
 	changesets := make([]*ChangeSet, 0, 50)
 	draft := new(ChangeSet)
 	for sc.Scan() {
 		line := sc.Text()
+		io.WriteString(tee, "HGLOG> ")
+		fmt.Fprintln(tee, line)
 		field := strings.SplitN(line, ":", 2)
 		if len(field) < 2 {
 			if err := warn(ErrColonNotFound(line)); err != nil {
@@ -54,6 +57,8 @@ func ReadChangeSets(r io.Reader, warn func(error) error) ([]*ChangeSet, error) {
 			continue
 		}
 		switch field[0] {
+		case "parent":
+			draft.parentIDs = append(draft.parentIDs, field[1])
 		case "changeset":
 			var err error
 			draft.Serial, draft.ChangeSetId, err = parseChangeSetId(field[1])
@@ -108,6 +113,8 @@ func ReadChangeSets(r io.Reader, warn func(error) error) ([]*ChangeSet, error) {
 				}
 				buffer.WriteString(desc)
 			}
+		case "branch":
+			// do nothing
 		default:
 			if err := warn(fmt.Errorf("%s: not supported tag", field[0])); err != nil {
 				return nil, err
@@ -154,5 +161,5 @@ func LoadChangeSets(dir string, warn func(error) error) ([]*ChangeSet, error) {
 	}
 	defer cmd1.Wait()
 
-	return ReadChangeSets(hgLog, warn)
+	return ReadChangeSets(hgLog, warn, os.Stderr)
 }

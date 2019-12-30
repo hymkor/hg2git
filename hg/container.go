@@ -1,5 +1,11 @@
 package hg
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 type Repository struct {
 	BySerial map[int]*ChangeSet
 	ByHash   map[string]*ChangeSet
@@ -16,10 +22,12 @@ func (rep *Repository) Load(dir string, warn func(error) error) error {
 	rep.ByHash = make(map[string]*ChangeSet, len(sets))
 	rep.ByTag = make(map[string]*ChangeSet)
 
+	sets = append(sets, &ChangeSet{Serial: -1, ChangeSetId: "000000000000"})
 	max := -1
 	for _, set := range sets {
 		rep.BySerial[set.Serial] = set
 		rep.ByHash[set.ChangeSetId] = set
+
 		for _, tag1 := range set.Tags {
 			rep.ByTag[tag1] = set
 		}
@@ -27,17 +35,24 @@ func (rep *Repository) Load(dir string, warn func(error) error) error {
 			max = set.Serial
 		}
 	}
-	for _, set := range sets {
-		if set.Parents == nil {
-			if p, ok := rep.BySerial[set.Serial-1]; ok {
-				set.Parents = []*ChangeSet{p}
-			}
-		}
-	}
 	if max >= 0 {
 		rep.Head = rep.BySerial[max]
 	} else {
 		rep.Head = nil
+	}
+	for _, set := range sets {
+		for _, idStr := range set.parentIDs {
+			p := strings.Split(strings.TrimSpace(idStr), ":")
+			idNum, err := strconv.Atoi(p[0])
+			if err != nil {
+				return err
+			}
+			if p, ok := rep.BySerial[idNum]; ok {
+				set.Parents = append(set.Parents, p)
+			} else {
+				return fmt.Errorf("%d:%s: mercurial serial number %d(%s) not found.", set.Serial, set.ChangeSetId, idNum, idStr)
+			}
+		}
 	}
 	return nil
 }
