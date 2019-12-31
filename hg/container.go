@@ -13,6 +13,8 @@ type Repository struct {
 	Head     *ChangeSet
 }
 
+const nullCommit = "000000000000"
+
 func (rep *Repository) Load(dir string, warn func(error) error) error {
 	sets, err := LoadChangeSets(dir, warn)
 	if err != nil {
@@ -22,7 +24,7 @@ func (rep *Repository) Load(dir string, warn func(error) error) error {
 	rep.ByHash = make(map[string]*ChangeSet, len(sets))
 	rep.ByTag = make(map[string]*ChangeSet)
 
-	sets = append(sets, &ChangeSet{Serial: -1, ChangeSetId: "000000000000"})
+	sets = append(sets, &ChangeSet{Serial: -1, ChangeSetId: nullCommit})
 	max := -1
 	for _, set := range sets {
 		rep.BySerial[set.Serial] = set

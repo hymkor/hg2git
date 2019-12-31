@@ -9,12 +9,7 @@ import (
 	"time"
 )
 
-func run(name string, args ...string) error {
-	cmd1 := exec.Command(name, args...)
-	cmd1.Stdout = os.Stdout
-	cmd1.Stderr = os.Stderr
-	cmd1.Stdin = os.Stdin
-
+func dump(name string, args []string) {
 	fmt.Println()
 	fmt.Print(name)
 	for _, s := range args {
@@ -26,6 +21,15 @@ func run(name string, args ...string) error {
 		}
 	}
 	fmt.Println()
+}
+
+func run(name string, args ...string) error {
+	cmd1 := exec.Command(name, args...)
+	cmd1.Stdout = os.Stdout
+	cmd1.Stderr = os.Stderr
+	cmd1.Stdin = os.Stdin
+
+	dump(name, args)
 	return cmd1.Run()
 }
 
@@ -33,11 +37,14 @@ func quote(name string, args ...string) (string, error) {
 	cmd1 := exec.Command(name, args...)
 	cmd1.Stderr = os.Stderr
 	cmd1.Stdin = os.Stdin
+	dump(name, args)
 	output, err := cmd1.Output()
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(output)), nil
+	result := strings.TrimSpace(string(output))
+	fmt.Println(result)
+	return result, nil
 }
 
 var fullAuthor = regexp.MustCompile(`\<\w+\@[\w\.]+\>\s*$`)
@@ -57,18 +64,40 @@ func hgClone(src, dst string) error {
 	return run("hg", "clone", src, dst)
 }
 
-func gitInit() error {
+func gitInit() (string, error) {
 	if err := run("git", "init"); err != nil {
-		return err
+		return "", err
 	}
-	return run("git", "config", "--local", "core.autocrlf", "false")
+	err := run("git", "config", "--local", "core.autocrlf", "false")
+	if err != nil {
+		return "", err
+	}
+	err = run("git", "commit", "-m", "zero", "--allow-empty")
+	if err != nil {
+		return "", err
+	}
+	return getCurrentGitCommit()
 }
 
 func hgUpdateC(id string) error {
 	return run("hg", "update", "-C", id)
 }
 
-func hgAdd(files ...string) error {
+func getHgChange(id string) ([]string, error) {
+	output, err := quote("hg", "status", "--change", id)
+	if err != nil {
+		return nil, err
+	}
+	files := []string{}
+	for _, line := range strings.Split(output, "\n") {
+		if len(line) >= 2 {
+			files = append(files, line[2:])
+		}
+	}
+	return files, nil
+}
+
+func gitAdd(files ...string) error {
 	args := []string{"add"}
 	cont := ""
 	for _, s := range files {
@@ -83,6 +112,10 @@ func hgAdd(files ...string) error {
 	return run("git", args...)
 }
 
+func getCurrentGitCommit() (string, error) {
+	return quote("git", "log", "-n", "1", "--format=%H")
+}
+
 func gitCommit(desc string, date time.Time, user string) (string, error) {
 	err := run("git", "commit",
 		"-m", desc,
@@ -91,14 +124,18 @@ func gitCommit(desc string, date time.Time, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return quote("git", "log", "-n", "1", "--format=%H")
+	return getCurrentGitCommit()
 }
 
 func hgOneCommitToGit(cs *ChangeSet) (string, error) {
 	if err := hgUpdateC(cs.ChangeSetId); err != nil {
 		return "", err
 	}
-	if err := hgAdd(cs.Files...); err != nil {
+	files, err := getHgChange(cs.ChangeSetId)
+	if err != nil {
+		return "", err
+	}
+	if err := gitAdd(files...); err != nil {
 		return "", err
 	}
 	return gitCommit(cs.Description, cs.Date, cs.User)
@@ -141,23 +178,21 @@ func Trace(src, dst string) error {
 	if err := os.Chdir(dst); err != nil {
 		return err
 	}
-
-	if err := gitInit(); err != nil {
-		return err
-	}
-
-	lastHgId := rep.BySerial[0].ChangeSetId
-	lastGitId, err := hgOneCommitToGit(rep.BySerial[0])
+	lastGitId, err := gitInit()
 	if err != nil {
 		return err
 	}
+	lastHgId := nullCommit
+
 	branchSerial := 0
 	branchName := "master"
 
 	HgIdToGit := map[string][2]string{
-		lastHgId: [2]string{lastGitId, branchName}}
+		lastGitId: [2]string{nullCommit, branchName},
+	}
+	rep.BySerial[-1] = &ChangeSet{Serial: -1, ChangeSetId: nullCommit}
 
-	for serial := 1; ; serial++ {
+	for serial := 0; ; serial++ {
 		cs, ok := rep.BySerial[serial]
 		if !ok {
 			break
@@ -185,6 +220,10 @@ func Trace(src, dst string) error {
 		}
 		lastHgId = cs.ChangeSetId
 		HgIdToGit[lastHgId] = [2]string{lastGitId, branchName}
+
+		fmt.Printf("*** ChangeSetID: %s -> branch:%s commit:%s ***\n",
+			lastHgId, branchName, lastGitId)
+
 	}
 
 	return nil
