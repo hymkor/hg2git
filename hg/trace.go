@@ -99,16 +99,7 @@ func getHgChange(id string) ([]string, error) {
 
 func gitAdd(files ...string) error {
 	args := []string{"add"}
-	cont := ""
-	for _, s := range files {
-		fname := cont + s
-		if _, err := os.Stat(fname); err != nil {
-			cont = fname + " "
-		} else {
-			args = append(args, fname)
-			cont = ""
-		}
-	}
+	args = append(args, files...)
 	return run("git", args...)
 }
 
@@ -188,7 +179,7 @@ func Trace(src, dst string) error {
 	branchName := "master"
 
 	HgIdToGit := map[string][2]string{
-		lastGitId: [2]string{nullCommit, branchName},
+		nullCommit: [2]string{lastGitId, branchName},
 	}
 	rep.BySerial[-1] = &ChangeSet{Serial: -1, ChangeSetId: nullCommit}
 
@@ -200,15 +191,29 @@ func Trace(src, dst string) error {
 		if len(cs.Parents) >= 1 {
 			if cs.Parents[0].ChangeSetId == lastHgId {
 				if len(cs.Parents) >= 2 {
-					gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
+					p, ok := HgIdToGit[cs.Parents[1].ChangeSetId]
+					if !ok {
+						return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case1)", cs.Parents[1].ChangeSetId)
+
+					}
+					gitMerge(p[1])
 				}
 			} else if len(cs.Parents) >= 2 && cs.Parents[1].ChangeSetId == lastHgId {
-				gitMerge(HgIdToGit[cs.Parents[0].ChangeSetId][1])
+				p, ok := HgIdToGit[cs.Parents[0].ChangeSetId]
+				if !ok {
+					return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case2)", cs.Parents[0].ChangeSetId)
+				}
+				gitMerge(p[1])
 			} else {
 				// new branch
 				branchSerial++
 				branchName = fmt.Sprintf("fork%d", branchSerial)
-				gitCheckout(HgIdToGit[cs.Parents[0].ChangeSetId][0], branchName)
+				p1, ok := HgIdToGit[cs.Parents[0].ChangeSetId]
+				if !ok {
+					return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case3)",
+						cs.Parents[0].ChangeSetId)
+				}
+				gitCheckout(p1[0], branchName)
 				if len(cs.Parents) >= 2 {
 					gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
 				}
