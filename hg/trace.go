@@ -83,22 +83,32 @@ func hgUpdateC(id string) error {
 	return run("hg", "update", "-C", id)
 }
 
-func getHgChange(id string) ([]string, error) {
+func getHgChange(id string) ([]string, []string, error) {
 	output, err := quote("hg", "status", "--change", id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	files := []string{}
+	var add, remove []string
 	for _, line := range strings.Split(output, "\n") {
 		if len(line) >= 2 {
-			files = append(files, line[2:])
+			if line[0] == 'R' {
+				remove = append(remove, line[2:])
+			} else {
+				add = append(add, line[2:])
+			}
 		}
 	}
-	return files, nil
+	return add, remove, nil
 }
 
 func gitAdd(files ...string) error {
 	args := []string{"add"}
+	args = append(args, files...)
+	return run("git", args...)
+}
+
+func gitRemove(files ...string) error {
+	args := []string{"remove"}
 	args = append(args, files...)
 	return run("git", args...)
 }
@@ -122,11 +132,14 @@ func hgOneCommitToGit(cs *ChangeSet) (string, error) {
 	if err := hgUpdateC(cs.ChangeSetId); err != nil {
 		return "", err
 	}
-	files, err := getHgChange(cs.ChangeSetId)
+	add, remove, err := getHgChange(cs.ChangeSetId)
 	if err != nil {
 		return "", err
 	}
-	if err := gitAdd(files...); err != nil {
+	if err := gitRemove(remove...); err != nil {
+		return "", err
+	}
+	if err := gitAdd(add...); err != nil {
 		return "", err
 	}
 	return gitCommit(cs.Description, cs.Date, cs.User)
