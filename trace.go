@@ -102,13 +102,19 @@ func getHgChange(id string) ([]string, []string, error) {
 }
 
 func gitAdd(files ...string) error {
+	if len(files) <= 0 {
+		return nil
+	}
 	args := []string{"add"}
 	args = append(args, files...)
 	return run("git", args...)
 }
 
 func gitRemove(files ...string) error {
-	args := []string{"remove"}
+	if len(files) <= 0 {
+		return nil
+	}
+	args := []string{"rm"}
 	args = append(args, files...)
 	return run("git", args...)
 }
@@ -128,7 +134,7 @@ func gitCommit(desc string, date time.Time, user string) (string, error) {
 	return getCurrentGitCommit()
 }
 
-func hgOneCommitToGit(cs *ChangeSet) (string, error) {
+func hgOneCommitToGit(cs *ChangeSet, warn func(error) error) (string, error) {
 	if err := hgUpdateC(cs.ChangeSetId); err != nil {
 		return "", err
 	}
@@ -137,10 +143,14 @@ func hgOneCommitToGit(cs *ChangeSet) (string, error) {
 		return "", err
 	}
 	if err := gitRemove(remove...); err != nil {
-		return "", err
+		if err = warn(err); err != nil {
+			return "", err
+		}
 	}
 	if err := gitAdd(add...); err != nil {
-		return "", err
+		if err = warn(err); err != nil {
+			return "", err
+		}
 	}
 	return gitCommit(cs.Description, cs.Date, cs.User)
 }
@@ -232,7 +242,10 @@ func Trace(src, dst string) error {
 				}
 			}
 		}
-		lastGitId, err = hgOneCommitToGit(cs)
+		lastGitId, err = hgOneCommitToGit(cs, func(err error) error {
+			fmt.Println("hg2git: warning:", err.Error())
+			return nil
+		})
 		if err != nil {
 			return err
 		}
