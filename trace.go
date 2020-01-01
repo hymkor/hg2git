@@ -128,7 +128,8 @@ func gitCommit(desc string, date time.Time, user string) (string, error) {
 		"-m", desc,
 		"--date", date.Format("Mon Jan 02 15:04:05 2006 -0700"),
 		"--author", author(user),
-		"--allow-empty")
+		"--allow-empty",
+		"-a")
 	if err != nil {
 		return "", err
 	}
