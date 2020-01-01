@@ -1,4 +1,4 @@
-package hg
+package main
 
 import (
 	"bufio"

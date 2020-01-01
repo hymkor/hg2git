@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/zetamatta/hg2git/hg"
 )
 
 func main() {
@@ -15,7 +13,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := hg.Trace(os.Args[1], os.Args[2]); err != nil {
+	if err := Trace(os.Args[1], os.Args[2]); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(2)
 	}
