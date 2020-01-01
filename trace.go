@@ -157,8 +157,11 @@ func hgOneCommitToGit(cs *ChangeSet, warn func(error) error) (string, error) {
 	return gitCommit(cs.Description, cs.Date, cs.User)
 }
 
-func gitMerge(id string) {
-	run("git", "merge", "--no-commit", "--no-edit", id)
+func gitMerge(branch string) func() {
+	run("git", "merge", "--no-commit", "--no-edit", branch)
+	return func() {
+		run("git", "branch", "-d", branch)
+	}
 }
 
 func gitCheckout(id, newbranch string) {
@@ -213,6 +216,7 @@ func Trace(src, dst string) error {
 		if !ok {
 			break
 		}
+		gc := func() {}
 		if len(cs.Parents) >= 1 {
 			if cs.Parents[0].ChangeSetId == lastHgId {
 				if len(cs.Parents) >= 2 {
@@ -221,14 +225,14 @@ func Trace(src, dst string) error {
 						return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case1)", cs.Parents[1].ChangeSetId)
 
 					}
-					gitMerge(p[1])
+					gc = gitMerge(p[1])
 				}
 			} else if len(cs.Parents) >= 2 && cs.Parents[1].ChangeSetId == lastHgId {
 				p, ok := HgIdToGit[cs.Parents[0].ChangeSetId]
 				if !ok {
 					return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case2)", cs.Parents[0].ChangeSetId)
 				}
-				gitMerge(p[1])
+				gc = gitMerge(p[1])
 			} else {
 				// new branch
 				branchSerial++
@@ -240,7 +244,7 @@ func Trace(src, dst string) error {
 				}
 				gitCheckout(p1[0], branchName)
 				if len(cs.Parents) >= 2 {
-					gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
+					gc = gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
 				}
 			}
 		}
@@ -256,7 +260,7 @@ func Trace(src, dst string) error {
 
 		fmt.Printf("*** ChangeSetID: %s -> branch:%s commit:%s ***\n",
 			lastHgId, branchName, lastGitId)
-
+		gc()
 	}
 
 	return nil
