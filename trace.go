@@ -154,7 +154,11 @@ func hgOneCommitToGit(cs *ChangeSet, warn func(error) error) (string, error) {
 			return "", err
 		}
 	}
-	return gitCommit(cs.Description, cs.Date, cs.User)
+	return gitCommit(
+		fmt.Sprintf("%s\nHG: %s",
+			cs.Description,
+			cs.ChangeSetId,
+		), cs.Date, cs.User)
 }
 
 func gitMerge(branch string) func() {
