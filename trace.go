@@ -240,7 +240,7 @@ func Trace(src, dst string) error {
 			} else {
 				// new branch
 				branchSerial++
-				branchName = fmt.Sprintf("fork%d", branchSerial)
+				branchName = fmt.Sprintf("fork%04d", branchSerial)
 				p1, ok := HgIdToGit[cs.Parents[0].ChangeSetId]
 				if !ok {
 					return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case3)",
@@ -271,6 +271,10 @@ func Trace(src, dst string) error {
 		}
 		gc = gc[:0]
 	}
-
+	if branchName != "master" {
+		run("git", "branch", "-m", "master", "fork0000")
+		run("git", "branch", "-m", branchName, "master")
+	}
+	run("git", "gc")
 	return nil
 }
