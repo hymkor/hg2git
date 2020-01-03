@@ -215,12 +215,12 @@ func Trace(src, dst string) error {
 	}
 	rep.BySerial[-1] = &ChangeSet{Serial: -1, ChangeSetId: nullCommit}
 
+	gc := make([]func(), 0, 2)
 	for serial := 0; ; serial++ {
 		cs, ok := rep.BySerial[serial]
 		if !ok {
 			break
 		}
-		gc := func() {}
 		if len(cs.Parents) >= 1 {
 			if cs.Parents[0].ChangeSetId == lastHgId {
 				if len(cs.Parents) >= 2 {
@@ -229,14 +229,14 @@ func Trace(src, dst string) error {
 						return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case1)", cs.Parents[1].ChangeSetId)
 
 					}
-					gc = gitMerge(p[1])
+					gc = append(gc, gitMerge(p[1]))
 				}
 			} else if len(cs.Parents) >= 2 && cs.Parents[1].ChangeSetId == lastHgId {
 				p, ok := HgIdToGit[cs.Parents[0].ChangeSetId]
 				if !ok {
 					return fmt.Errorf("Git-Commit for ChangeSet '%s' not found (case2)", cs.Parents[0].ChangeSetId)
 				}
-				gc = gitMerge(p[1])
+				gc = append(gc, gitMerge(p[0]))
 			} else {
 				// new branch
 				branchSerial++
@@ -248,7 +248,8 @@ func Trace(src, dst string) error {
 				}
 				gitCheckout(p1[0], branchName)
 				if len(cs.Parents) >= 2 {
-					gc = gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1])
+					gc = append(gc, func() { run("git", "branch", "-d", HgIdToGit[cs.Parents[0].ChangeSetId][1]) })
+					gc = append(gc, gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1]))
 				}
 			}
 		}
@@ -264,7 +265,11 @@ func Trace(src, dst string) error {
 
 		fmt.Printf("*** ChangeSetID: %s -> branch:%s commit:%s ***\n",
 			lastHgId, branchName, lastGitId)
-		gc()
+
+		for _, gc1 := range gc {
+			gc1()
+		}
+		gc = gc[:0]
 	}
 
 	return nil
