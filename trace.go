@@ -126,7 +126,7 @@ func getCurrentGitCommit() (string, error) {
 func gitCommit(desc string, date time.Time, user string) (string, error) {
 	err := run("git", "commit",
 		"-m", desc,
-		"--date", date.Format("Mon Jan 02 15:04:05 2006 -0700"),
+		"--date", date.Format("Mon Jan 2 15:04:05 2006 -0700"),
 		"--author", author(user),
 		"--allow-empty",
 		"-a")
