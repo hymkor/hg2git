@@ -3,49 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/zetamatta/hg2git/com"
 )
-
-func dump(name string, args []string) {
-	fmt.Println()
-	fmt.Print(name)
-	for _, s := range args {
-		fmt.Print(" ")
-		if strings.IndexByte(s, ' ') >= 0 {
-			fmt.Print("\"", s, "\"")
-		} else {
-			fmt.Print(s)
-		}
-	}
-	fmt.Println()
-}
-
-func run(name string, args ...string) error {
-	cmd1 := exec.Command(name, args...)
-	cmd1.Stdout = os.Stdout
-	cmd1.Stderr = os.Stderr
-	cmd1.Stdin = os.Stdin
-
-	dump(name, args)
-	return cmd1.Run()
-}
-
-func quote(name string, args ...string) (string, error) {
-	cmd1 := exec.Command(name, args...)
-	cmd1.Stderr = os.Stderr
-	cmd1.Stdin = os.Stdin
-	dump(name, args)
-	output, err := cmd1.Output()
-	if err != nil {
-		return "", err
-	}
-	result := strings.TrimSpace(string(output))
-	fmt.Println(result)
-	return result, nil
-}
 
 var fullAuthor = regexp.MustCompile(`\<\w+\@[\w\.]+\>\s*$`)
 
@@ -61,18 +24,18 @@ func author(org string) string {
 }
 
 func hgClone(src, dst string) error {
-	return run("hg", "clone", src, dst)
+	return com.Run("hg", "clone", src, dst)
 }
 
 func gitInit() (string, error) {
-	if err := run("git", "init"); err != nil {
+	if err := com.Run("git", "init"); err != nil {
 		return "", err
 	}
-	err := run("git", "config", "--local", "core.autocrlf", "false")
+	err := com.Run("git", "config", "--local", "core.autocrlf", "false")
 	if err != nil {
 		return "", err
 	}
-	err = run("git", "commit", "-m", "zero", "--allow-empty")
+	err = com.Run("git", "commit", "-m", "zero", "--allow-empty")
 	if err != nil {
 		return "", err
 	}
@@ -80,11 +43,11 @@ func gitInit() (string, error) {
 }
 
 func hgUpdateC(id string) error {
-	return run("hg", "update", "-C", id)
+	return com.Run("hg", "update", "-C", id)
 }
 
 func getHgChange(id string) ([]string, []string, error) {
-	output, err := quote("hg", "status", "--change", id)
+	output, err := com.Quote("hg", "status", "--change", id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -107,7 +70,7 @@ func gitAdd(files ...string) error {
 	}
 	args := []string{"add"}
 	args = append(args, files...)
-	return run("git", args...)
+	return com.Run("git", args...)
 }
 
 func gitRemove(files ...string) error {
@@ -116,15 +79,15 @@ func gitRemove(files ...string) error {
 	}
 	args := []string{"rm"}
 	args = append(args, files...)
-	return run("git", args...)
+	return com.Run("git", args...)
 }
 
 func getCurrentGitCommit() (string, error) {
-	return quote("git", "log", "-n", "1", "--format=%H")
+	return com.Quote("git", "log", "-n", "1", "--format=%H")
 }
 
 func gitCommit(desc string, date time.Time, user string) (string, error) {
-	err := run("git", "commit",
+	err := com.Run("git", "commit",
 		"-m", desc,
 		"--date", date.Format("Mon Jan 2 15:04:05 2006 -0700"),
 		"--author", author(user),
@@ -162,15 +125,15 @@ func hgOneCommitToGit(cs *ChangeSet, warn func(error) error) (string, error) {
 }
 
 func gitMerge(branch string) func() {
-	run("git", "merge", "--no-commit", "--no-edit", branch)
+	com.Run("git", "merge", "--no-commit", "--no-edit", branch)
 	return func() {
-		run("git", "branch", "-d", branch)
+		com.Run("git", "branch", "-d", branch)
 	}
 }
 
 func gitCheckout(id, newbranch string) {
-	run("git", "checkout", "-f", id)
-	run("git", "checkout", "-b", newbranch)
+	com.Run("git", "checkout", "-f", id)
+	com.Run("git", "checkout", "-b", newbranch)
 }
 
 func Trace(src, dst string) error {
@@ -248,7 +211,7 @@ func Trace(src, dst string) error {
 				}
 				gitCheckout(p1[0], branchName)
 				if len(cs.Parents) >= 2 {
-					gc = append(gc, func() { run("git", "branch", "-d", HgIdToGit[cs.Parents[0].ChangeSetId][1]) })
+					gc = append(gc, func() { com.Run("git", "branch", "-d", HgIdToGit[cs.Parents[0].ChangeSetId][1]) })
 					gc = append(gc, gitMerge(HgIdToGit[cs.Parents[1].ChangeSetId][1]))
 				}
 			}
@@ -272,9 +235,9 @@ func Trace(src, dst string) error {
 		gc = gc[:0]
 	}
 	if branchName != "master" {
-		run("git", "branch", "-m", "master", "fork0000")
-		run("git", "branch", "-m", branchName, "master")
+		com.Run("git", "branch", "-m", "master", "fork0000")
+		com.Run("git", "branch", "-m", branchName, "master")
 	}
-	run("git", "gc")
+	com.Run("git", "gc")
 	return nil
 }
